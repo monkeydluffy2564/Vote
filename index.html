@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Voting App (แอปโหวตเรียลไทม์)</title>
+    <!-- 1. Tailwind CSS --><script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. Chart.js for graphs --><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 3. Inter Font --><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* ซ่อน view ทั้งหมดไว้ก่อน */
+        .view {
+            display: none;
+        }
+        /* ปรับสไตล์ของ input type="number" บน Chrome/Edge/Safari */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* ปรับสไตล์ของ input type="number" บน Firefox */
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <!-- ปุ่ม Admin ลอยอยู่มุมบนขวา -->
+    <button id="admin-login-trigger" class="fixed top-4 right-4 bg-gray-700 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-gray-800 transition z-50">
+        👨‍💼 Admin
+    </button>
+
+    <div id="app-container" class="w-full max-w-lg">
+
+        <!-- ===== 1. Loading View (หน้าจอรอโหลด) ===== --><div id="loading-view" class="view text-center p-8 bg-white rounded-xl shadow-2xl">
+            <h1 class="text-2xl font-bold text-gray-800">กำลังโหลด...</h1>
+            <p class="text-gray-500 mt-2">กำลังเชื่อมต่อกับเซิร์ฟเวอร์...</p>
+        </div>
+
+        <!-- ===== (ลบ Home View เดิมออก) ===== -->
+
+        <!-- ===== 3. Admin View (หน้าจอแอดมิน) ===== --><div id="admin-view" class="view w-full">
+            <!-- 3.1 Admin: Create Poll (หน้าสร้างโหวต) --><div id="admin-create-poll" class="bg-white rounded-xl shadow-2xl p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">สร้างรอบโหวตใหม่</h2>
+                    <!-- เปลี่ยนเป็นปุ่ม Logout -->
+                    <button id="admin-logout-btn" class="text-sm text-gray-500 hover:text-gray-700">ออกจากระบบ &rarr;</button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label for="poll-topic" class="block text-sm font-medium text-gray-700">หัวข้อโหวต:</label>
+                        <input type="text" id="poll-topic" placeholder="เช่น: มื้อเที่ยงนี้กินอะไรดี?" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="poll-type" class="block text-sm font-medium text-gray-700">รูปแบบการโหวต:</label>
+                        <select id="poll-type" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                            <option value="yes-no">เห็นด้วย / ไม่เห็นด้วย</option>
+                            <option value="custom">กำหนดเอง (สูงสุด 40 ตัวเลือก)</option>
+                        </select>
+                    </div>
+                    <!-- ===== เพิ่ม: ตัวเลือกการจำกัดสิทธิ์โหวต ===== -->
+                    <div>
+                        <label for="vote-restriction" class="block text-sm font-medium text-gray-700">การจำกัดสิทธิ์โหวต:</label>
+                        <select id="vote-restriction" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                            <option value="multiple" selected>โหวตหลายรอบได้ (ค่าเริ่มต้น)</option>
+                            <option value="single">จำกัด 1 สิทธิ์โหวตต่อเครื่อง</option>
+                        </select>
+                    </div>
+                    <!-- ========================================== -->
+                    <!-- ช่องสำหรับตัวเลือกแบบกำหนดเอง (เปลี่ยนเป็น textarea) --><div id="custom-options-container" class="space-y-2 hidden">
+                        <label for="custom-options-textarea" class="block text-sm font-medium text-gray-700">ตัวเลือกที่กำหนดเอง (บรรทัดละ 1 ตัวเลือก, 2-40 ตัวเลือก):</label>
+                        <textarea id="custom-options-textarea" rows="8" class="block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="ตัวเลือกที่ 1
+ตัวเลือกที่ 2
+ตัวเลือกที่ 3"></textarea>
+                    </div>
+                    
+                    <p id="admin-error" class="text-red-500 text-sm"></p>
+                    
+                    <button id="start-poll-btn" class="w-full bg-blue-600 text-white p-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition duration-300 shadow-md">
+                        🚀 เริ่มรอบโหวต
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3.2 Admin: Dashboard (หน้าแดชบอร์ดแสดงผล) --><div id="admin-dashboard" class="hidden bg-white rounded-xl shadow-2xl p-8">
+                <h2 class="text-2xl font-bold text-gray-900 text-center mb-2">หัวข้อ: <span id="dashboard-topic" class="text-blue-600">...</span></h2>
+                <p class="text-center text-gray-600 mb-4">ผู้โหวตใช้ PIN นี้เพื่อเข้าร่วม:</p>
+                <div class="bg-gray-900 text-white p-6 rounded-lg text-center mb-6 shadow-inner">
+                    <span id="dashboard-pin" class="text-6xl font-bold tracking-widest">----</span>
+                </div>
+                
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">ผลโหวตแบบเรียลไทม์</h3>
+                <div class="w-full h-64">
+                    <canvas id="vote-chart"></canvas>
+                </div>
+                
+                <button id="close-poll-btn" class="w-full bg-red-600 text-white p-4 rounded-lg font-semibold text-lg hover:bg-red-700 transition duration-300 shadow-md mt-8">
+                    🔒 ปิดรอบโหวต
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== 4. Voter View (หน้าจอผู้โหวต) - นี่คือหน้าแรก ===== --><div id="voter-view" class="view w-full">
+            <!-- 4.1 Voter: PIN Entry (หน้ากรอก PIN) --><div id="voter-pin-entry" class="bg-white rounded-xl shadow-2xl p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">เข้าร่วมโหวต</h2>
+                    <!-- ลบปุ่มกลับหน้าหลัก -->
+                </div>
+                <div>
+                    <label for="pin-input" class="block text-sm font-medium text-gray-700">กรอก PIN 4 หลัก:</label>
+                    <input type="number" id="pin-input" placeholder="1234" maxlength="4" class="mt-1 block w-full p-4 text-2xl text-center border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500">
+                </div>
+                
+                <p id="voter-error" class="text-red-500 text-sm mt-4 text-center"></p>
+
+                <button id="join-poll-btn" class="w-full bg-green-600 text-white p-4 rounded-lg font-semibold text-lg hover:bg-green-700 transition duration-300 shadow-md mt-6">
+                    เข้าร่วม
+                </button>
+            </div>
+
+            <!-- 4.2 Voter: Voting Area (หน้าโหวต) --><div id="voter-voting-area" class="hidden bg-white rounded-xl shadow-2xl p-8">
+                <h2 class="text-2xl font-bold text-gray-900 text-center mb-2">หัวข้อโหวต</h2>
+                <p id="voter-topic" class="text-center text-gray-700 text-lg mb-8">...</p>
+                
+                <div id="voter-options-container" class="space-y-4">
+                    <!-- ปุ่มโหวตจะถูกสร้างโดย JavaScript --></div>
+                
+                <!-- เพิ่มช่องแสดง error สำหรับหน้าโหวต -->
+                <p id="voter-vote-error" class="text-red-500 text-sm mt-4 text-center"></p>
+            </div>
+
+            <!-- 4.3 Voter: Message Area (หน้าแสดงข้อความ) --><div id="voter-message-area" class="hidden bg-white rounded-xl shadow-2xl p-12 text-center">
+                <h2 id="voter-message-title" class="text-2xl font-bold text-gray-900">...</h2>
+                <p id="voter-message-body" class="text-gray-600 mt-2">...</p>
+                <button id="voter-back-pin-btn" class="mt-6 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300 transition">
+                    &larr; กลับไปหน้ากรอก PIN
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===== Admin Login Modal ===== -->
+    <div id="admin-login-view" class="view fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-40">
+        <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-sm">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Admin Login</h2>
+                <button id="admin-login-close-btn" class="text-2xl text-gray-500 hover:text-gray-700">&times;</button>
+            </div>
+            <div>
+                <label for="admin-password" class="block text-sm font-medium text-gray-700">กรอกรหัสผ่าน:</label>
+                <input type="password" id="admin-password" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <p id="admin-login-error" class="text-red-500 text-sm mt-4 text-center"></p>
+            <button id="admin-login-submit-btn" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition duration-300 shadow-md mt-6">
+                เข้าสู่ระบบ
+            </button>
+        </div>
+    </div>
+
+
+    <script type="module" src="script.min.js"></script>
+	
+</body>
+</html>
